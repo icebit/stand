@@ -1,7 +1,6 @@
 #!/usr/bin/env swift
 
 import Cocoa
-import AVFoundation
 
 // -- Configuration (override via environment variables) --
 let standInterval = TimeInterval(ProcessInfo.processInfo.environment["STAND_INTERVAL"].flatMap(Double.init) ?? 1500) // 25 min
@@ -23,30 +22,6 @@ let sitMessages = [
     "SITTING GRANTED. TIMER RESTARTED.",
 ]
 
-// -- Sound generation using system sounds and speech --
-// Keep a strong reference so the synthesizer isn't deallocated mid-speech
-var activeSynth: AVSpeechSynthesizer?
-
-func speak(_ text: String) {
-    DispatchQueue.global(qos: .userInitiated).async {
-        let synth = AVSpeechSynthesizer()
-        activeSynth = synth
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        utterance.volume = 1.0
-        synth.speak(utterance)
-    }
-}
-
-func playAlarm() {
-    NSSound.beep()
-    speak("Stand up right now. This is not a drill.")
-}
-
-func playSitSound() {
-    speak("You may sit down now. Good job.")
-}
-
 // Borderless windows refuse key status by default — override that
 class KeyableWindow: NSWindow {
     override var canBecomeKey: Bool { true }
@@ -60,15 +35,27 @@ class BlockingOverlayController: NSObject, NSTextFieldDelegate {
     var messageLabel: NSTextField?
     var instructionLabel: NSTextField?
     var shakeTimer: Timer?
-    var soundTimer: Timer?
+    var focusTimer: Timer?
     var onDismiss: (() -> Void)?
     var currentMessage: String = ""
+    var isShowing: Bool { !windows.isEmpty }
 
     func show(message: String, phrase: String, onDismiss: @escaping () -> Void) {
         self.onDismiss = onDismiss
         self.currentMessage = message
 
-        // Cover every screen with a blocking window
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screensChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+
+        buildWindows(message: message, phrase: phrase)
+    }
+
+    private func buildWindows(message: String, phrase: String) {
+        // Cover every currently-connected screen
         for screen in NSScreen.screens {
             let window = KeyableWindow(
                 contentRect: screen.frame,
@@ -83,10 +70,11 @@ class BlockingOverlayController: NSObject, NSTextFieldDelegate {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             window.hidesOnDeactivate = false
 
-            if screen == NSScreen.main {
+            // Put the interactive content on the main screen; fall back to the first screen if main is gone
+            let isInteractive = (screen == NSScreen.main) || (NSScreen.main == nil && screen == NSScreen.screens.first)
+            if isInteractive {
                 let contentView = NSView(frame: screen.frame)
 
-                // Main warning message
                 let label = NSTextField(labelWithString: message)
                 label.font = NSFont.boldSystemFont(ofSize: 64)
                 label.textColor = NSColor.red
@@ -101,7 +89,6 @@ class BlockingOverlayController: NSObject, NSTextFieldDelegate {
                 contentView.addSubview(label)
                 self.messageLabel = label
 
-                // Instruction to dismiss
                 let instruction = NSTextField(labelWithString: "Type \"\(phrase)\" to dismiss")
                 instruction.font = NSFont.systemFont(ofSize: 28)
                 instruction.textColor = NSColor(white: 0.6, alpha: 1.0)
@@ -115,7 +102,6 @@ class BlockingOverlayController: NSObject, NSTextFieldDelegate {
                 contentView.addSubview(instruction)
                 self.instructionLabel = instruction
 
-                // Text input field
                 let input = NSTextField(frame: NSRect(
                     x: screen.frame.width / 2 - 200,
                     y: screen.frame.height / 2 - 100,
@@ -141,26 +127,19 @@ class BlockingOverlayController: NSObject, NSTextFieldDelegate {
             windows.append(window)
         }
 
-        // Force focus on the text field
         if let tf = textField, let mainWin = windows.first(where: { $0.contentView?.subviews.contains(tf) == true }) {
             mainWin.makeFirstResponder(tf)
         }
 
-        // Repeat alarm sound every 8 seconds
-        playAlarm()
-        soundTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
-            guard self != nil else { return }
-            playAlarm()
-        }
-
         // Shake the text periodically for extra annoyance
+        shakeTimer?.invalidate()
         shakeTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.shakeMessage()
         }
 
-        // Reclaim focus every second, but only re-focus the text field
-        // if it doesn't already have focus (to avoid re-selecting all text)
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+        // Reclaim focus every second without re-selecting text if already focused
+        focusTimer?.invalidate()
+        focusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             guard let self = self, !self.windows.isEmpty else {
                 timer.invalidate()
                 return
@@ -176,6 +155,25 @@ class BlockingOverlayController: NSObject, NSTextFieldDelegate {
                 }
             }
         }
+    }
+
+    @objc private func screensChanged() {
+        guard isShowing else { return }
+
+        // Tear down existing windows and rebuild for current screen layout
+        shakeTimer?.invalidate()
+        focusTimer?.invalidate()
+        shakeTimer = nil
+        focusTimer = nil
+        for window in windows {
+            window.orderOut(nil)
+        }
+        windows.removeAll()
+        textField = nil
+        messageLabel = nil
+        instructionLabel = nil
+
+        buildWindows(message: currentMessage, phrase: dismissPhrase)
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -196,10 +194,11 @@ class BlockingOverlayController: NSObject, NSTextFieldDelegate {
     }
 
     func dismiss() {
+        NotificationCenter.default.removeObserver(self, name: NSApplication.didChangeScreenParametersNotification, object: nil)
         shakeTimer?.invalidate()
-        soundTimer?.invalidate()
+        focusTimer?.invalidate()
         shakeTimer = nil
-        soundTimer = nil
+        focusTimer = nil
         for window in windows {
             window.orderOut(nil)
         }
@@ -217,7 +216,10 @@ class StandApp: NSObject, NSApplicationDelegate {
     var standTimer: Timer?
     var sitTimer: Timer?
     var statusItem: NSStatusItem?
+    var pauseMenuItem: NSMenuItem?
     var isStanding = false
+    var isPaused = false
+    var pausedFireDate: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
@@ -241,6 +243,11 @@ class StandApp: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Trigger Stand Now", action: #selector(triggerStandNow), keyEquivalent: ""))
+
+        let pauseItem = NSMenuItem(title: "Pause", action: #selector(togglePause), keyEquivalent: "p")
+        menu.addItem(pauseItem)
+        self.pauseMenuItem = pauseItem
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
         statusItem?.menu = menu
@@ -249,6 +256,9 @@ class StandApp: NSObject, NSApplicationDelegate {
     func scheduleStandReminder() {
         standTimer?.invalidate()
         isStanding = false
+        isPaused = false
+        pausedFireDate = nil
+        pauseMenuItem?.title = "Pause"
         statusItem?.button?.title = "Sit"
 
         standTimer = Timer.scheduledTimer(withTimeInterval: standInterval, repeats: false) { [weak self] _ in
@@ -276,9 +286,7 @@ class StandApp: NSObject, NSApplicationDelegate {
 
     func triggerSitOverlay() {
         let msg = sitMessages.randomElement() ?? sitMessages[0]
-        playSitSound()
 
-        // Brief, non-blocking notification for sit
         let alert = NSAlert()
         alert.messageText = msg
         alert.informativeText = "Timer restarting. Next stand in \(Int(standInterval / 60)) minutes."
@@ -292,6 +300,33 @@ class StandApp: NSObject, NSApplicationDelegate {
     @objc func triggerStandNow() {
         standTimer?.invalidate()
         triggerStandOverlay()
+    }
+
+    @objc func togglePause() {
+        if isPaused {
+            // Resume: restart timer with remaining time, or full interval if unknown
+            isPaused = false
+            let remaining: TimeInterval
+            if let fireDate = pausedFireDate {
+                remaining = max(1, fireDate.timeIntervalSinceNow)
+            } else {
+                remaining = standInterval
+            }
+            pausedFireDate = nil
+            standTimer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
+                self?.triggerStandOverlay()
+            }
+            pauseMenuItem?.title = "Pause"
+            statusItem?.button?.title = "Sit"
+        } else {
+            guard !isStanding else { return } // can't pause during stand
+            isPaused = true
+            pausedFireDate = standTimer?.fireDate
+            standTimer?.invalidate()
+            standTimer = nil
+            pauseMenuItem?.title = "Resume"
+            statusItem?.button?.title = "Paused"
+        }
     }
 
     @objc func quit() {

@@ -12,7 +12,7 @@ STAND_DURATION="${STAND_DURATION:-600}"
 STAND_PHRASE="${STAND_PHRASE:-i will stand}"
 
 echo "Compiling..."
-swiftc "$SCRIPT_DIR/stand.swift" -o "$BINARY" -framework Cocoa -framework AVFoundation
+swiftc "$SCRIPT_DIR/stand.swift" -o "$BINARY" -framework Cocoa
 
 echo "Installing launch agent..."
 
