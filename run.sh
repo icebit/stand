@@ -2,14 +2,14 @@
 
 # Compile and run the stand reminder
 # Configure via env vars:
-#   STAND_INTERVAL=1500  (seconds between stand reminders, default 25 min)
-#   STAND_DURATION=600   (seconds to stand for, default 10 min)
-#   STAND_PHRASE="i will stand"  (phrase to type to dismiss, default "i will stand")
+#   STAND_INTERVAL=3000       (seconds between stand reminders, default 50 min)
+#   STAND_DURATION=600        (seconds to stand for, default 10 min)
+#   STAND_TRAINING_EVERY=3    (every Nth transition is a training set)
 #
 # Examples:
-#   ./run.sh                          # defaults: 25min sit, 10min stand
-#   STAND_INTERVAL=900 ./run.sh       # stand every 15 min
-#   STAND_PHRASE="get up" ./run.sh    # custom dismiss phrase
+#   ./run.sh                            # defaults: 50min sit, 10min stand
+#   STAND_INTERVAL=1800 ./run.sh        # stand every 30 min
+#   STAND_TRAINING_EVERY=4 ./run.sh     # training set every 4th transition
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BINARY="$SCRIPT_DIR/.stand_binary"

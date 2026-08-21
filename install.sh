@@ -7,9 +7,9 @@ PLIST_NAME="com.user.stand"
 PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
 
 # Configurable defaults (edit these or override via launchd plist)
-STAND_INTERVAL="${STAND_INTERVAL:-1500}"
+STAND_INTERVAL="${STAND_INTERVAL:-3000}"
 STAND_DURATION="${STAND_DURATION:-600}"
-STAND_PHRASE="${STAND_PHRASE:-i will stand}"
+STAND_TRAINING_EVERY="${STAND_TRAINING_EVERY:-3}"
 
 echo "Compiling..."
 swiftc "$SCRIPT_DIR/stand.swift" -o "$BINARY" -framework Cocoa
@@ -38,8 +38,8 @@ cat > "$PLIST_PATH" <<EOF
         <string>$STAND_INTERVAL</string>
         <key>STAND_DURATION</key>
         <string>$STAND_DURATION</string>
-        <key>STAND_PHRASE</key>
-        <string>$STAND_PHRASE</string>
+        <key>STAND_TRAINING_EVERY</key>
+        <string>$STAND_TRAINING_EVERY</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -57,12 +57,12 @@ launchctl load "$PLIST_PATH"
 
 echo ""
 echo "Installed and running."
-echo "  Interval: $((STAND_INTERVAL / 60)) min"
-echo "  Duration: $((STAND_DURATION / 60)) min"
-echo "  Phrase:   \"$STAND_PHRASE\""
+echo "  Sit interval:   $((STAND_INTERVAL / 60)) min"
+echo "  Stand duration: $((STAND_DURATION / 60)) min"
+echo "  Training set:   every $STAND_TRAINING_EVERY transitions"
 echo ""
 echo "To reconfigure, edit values and re-run install.sh:"
-echo "  STAND_INTERVAL=900 STAND_DURATION=300 ./install.sh"
+echo "  STAND_INTERVAL=1800 STAND_TRAINING_EVERY=4 ./install.sh"
 echo ""
 echo "To uninstall:"
 echo "  ./uninstall.sh"
