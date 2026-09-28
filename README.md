@@ -1,14 +1,15 @@
 # stand
 
-A macOS menu bar app that turns the workday into an upper back / neck rehab program. Every ~50 minutes it takes over the screen with an unskippable overlay, prompts an exercise, and only dismisses when you type the exercise-specific completion phrase.
+A macOS menu bar app that turns the workday into an upper back / neck rehab program. Every ~50 minutes a neutral fullscreen break screen appears; esc dismisses it instantly, and the exercise lands in a small corner panel that stays until you type its completion phrase (or `skip`).
 
 ## Why it works this way
 
 Position rotation alone reduces static strain but builds no capacity — the durable fix for interscapular/neck pain is progressive strength training of the scapular retractors (mid/lower traps, rhomboids). This app delivers that training through the day using the existing sit/stand transitions as habit anchors:
 
+- **Two-phase prompt, because offices are social spaces.** The fullscreen phase is a plain, screen-break-looking page (no shouting red text) dismissed instantly with esc or return. The exercise obligation moves to a discreet bottom-right panel, so ending the social exposure no longer requires claiming or skipping the exercise. Do the set whenever convenient (a stairwell works), then type the phrase.
 - **Every transition (micro-dose):** 10 chin tucks, alternating with shoulder/neck mobility. Cheap enough to never resent.
 - **Every 3rd transition (training set):** one hard set, rotating through band pull-aparts, face pulls, wall slides, and thoracic extension. This is the progressive-overload stimulus (~2-3 sets/day).
-- **Skipping is allowed but logged.** Typing `skip` dismisses the exercise and puts it on your record. Tracking beats blocking.
+- **Skipping is allowed but logged.** Typing `skip` dismisses the exercise and puts it on your record. A panel still pending when the next cycle fires logs as `set_skipped` with `"how":"expired"`. Tracking beats blocking.
 - **Friday afternoon:** the overlay asks for a 0-10 weekly pain rating so the trend is visible over weeks.
 - **Monday:** the first training prompt nudges progression (shorten grip / add band).
 - **Menu bar** shows phase, training sets completed today, and day streak.
