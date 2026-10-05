@@ -683,7 +683,7 @@ class StandApp: NSObject, NSApplicationDelegate {
         let stats = computeRehabDailyStats()
         let alert = NSAlert()
         alert.messageText = sitMessages.randomElement() ?? sitMessages[0]
-        var infoText = "Next stand in \(Int(sitIntervalSeconds / 60)) minutes. Training sets today: \(stats.trainingSetsCompletedToday). Streak: \(stats.dayStreak) days."
+        var infoText = "Sit back down: hips all the way back against the backrest, then lean. Next stand in \(Int(sitIntervalSeconds / 60)) minutes. Training sets today: \(stats.trainingSetsCompletedToday). Streak: \(stats.dayStreak) days."
         if cornerPanel.isShowing {
             infoText += " Your exercise is still pending in the corner panel."
         }
